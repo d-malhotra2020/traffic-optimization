@@ -3,11 +3,11 @@ Traffic Prediction ML Models
 Simulates advanced ML models for traffic pattern prediction and optimization
 """
 
-import numpy as np
 import random
 import logging
 import time
 import asyncio
+import math
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass

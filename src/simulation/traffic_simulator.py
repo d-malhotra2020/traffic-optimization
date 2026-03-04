@@ -2,10 +2,10 @@ import asyncio
 import logging
 import random
 import time
+import math
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class TrafficSimulator:
         self.intersections = {}
         
         # Create grid-based intersection network
-        grid_size = int(np.sqrt(self.intersection_count))
+        grid_size = int(math.sqrt(self.intersection_count))
         
         for i in range(grid_size):
             for j in range(grid_size):
@@ -213,7 +213,7 @@ class TrafficSimulator:
             # Simple movement simulation
             dx = vehicle.destination[0] - vehicle.position[0]
             dy = vehicle.destination[1] - vehicle.position[1]
-            distance = np.sqrt(dx**2 + dy**2)
+            distance = math.sqrt(dx**2 + dy**2)
             
             if distance > 1:
                 # Move towards destination
