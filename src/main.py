@@ -78,25 +78,35 @@ app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["Monito
 
 @app.get("/")
 async def root():
-    """Root endpoint with system dashboard"""
-    return {
-        "service": "Traffic Flow Optimization Engine",
-        "version": "1.0.0",
-        "status": "active",
-        "features": {
-            "intersections_managed": await traffic_system.get_intersection_count(),
-            "efficiency_improvement": "15%",
-            "prediction_accuracy": "94%+",
-            "real_time_processing": True,
-            "multi_city_support": True
-        },
-        "endpoints": {
-            "traffic_data": "/api/v1/traffic/intersections",
-            "optimization": "/api/v1/optimization/optimize",
-            "monitoring": "/api/v1/monitoring/dashboard",
-            "simulation": "/api/v1/traffic/simulate"
+    """Serve the main dashboard"""
+    from fastapi.responses import FileResponse
+    import os
+    
+    # Get the path to the templates directory
+    template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates", "dashboard.html")
+    
+    if os.path.exists(template_path):
+        return FileResponse(template_path)
+    else:
+        # Fallback to API info if template not found
+        return {
+            "service": "Traffic Flow Optimization Engine",
+            "version": "1.0.0",
+            "status": "active",
+            "features": {
+                "intersections_managed": await traffic_system.get_intersection_count(),
+                "efficiency_improvement": "15%",
+                "prediction_accuracy": "94%+",
+                "real_time_processing": True,
+                "multi_city_support": True
+            },
+            "endpoints": {
+                "traffic_data": "/api/v1/traffic/intersections",
+                "optimization": "/api/v1/optimization/optimize",
+                "monitoring": "/api/v1/monitoring/dashboard",
+                "simulation": "/api/v1/traffic/simulate"
+            }
         }
-    }
 
 @app.get("/health")
 async def health_check():
@@ -114,9 +124,11 @@ async def get_metrics():
     return await traffic_system.get_system_metrics()
 
 if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         "src.main:app",
         host="0.0.0.0",
-        port=8001,
-        reload=True
+        port=port,
+        reload=False  # Set to False for production
     )
