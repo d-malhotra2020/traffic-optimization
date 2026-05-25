@@ -39,11 +39,11 @@ async def lifespan(app: FastAPI):
     await optimizer.start()
     
     logger.info("✅ Traffic optimization system started successfully!")
-    logger.info("📊 System Status:")
-    logger.info(f"   • Managing {traffic_system.get_intersection_count()} intersections")
-    logger.info(f"   • Target efficiency improvement: 15%")
-    logger.info(f"   • ML prediction accuracy: 94%+")
-    logger.info(f"   • Real-time processing: Active")
+    logger.info("📊 System status:")
+    sim_count = len(simulator.intersections)
+    logger.info(f"   • Simulator intersections (grid): {sim_count}")
+    logger.info(f"   • Optimizer: rule-based (queue-balancing + pattern-adaptive + efficiency-boost + congestion-relief)")
+    logger.info(f"   • Real-time processing: active")
     
     yield
     
@@ -88,24 +88,21 @@ async def root():
     if os.path.exists(template_path):
         return FileResponse(template_path)
     else:
-        # Fallback to API info if template not found
+        # Fallback API info if template not found
         return {
             "service": "Traffic Flow Optimization Engine",
             "version": "1.0.0",
             "status": "active",
-            "features": {
-                "intersections_managed": await traffic_system.get_intersection_count(),
-                "efficiency_improvement": "15%",
-                "prediction_accuracy": "94%+",
-                "real_time_processing": True,
-                "multi_city_support": True
+            "what_is_real": {
+                "simulator_intersections": len(simulator.intersections),
+                "optimizer": "rule-based (queue-balancing + pattern-adaptive + efficiency-boost + congestion-relief)",
             },
             "endpoints": {
                 "traffic_data": "/api/v1/traffic/intersections",
                 "optimization": "/api/v1/optimization/optimize",
                 "monitoring": "/api/v1/monitoring/dashboard",
-                "simulation": "/api/v1/traffic/simulate"
-            }
+                "simulation": "/api/v1/traffic/simulate",
+            },
         }
 
 @app.get("/health")

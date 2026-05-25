@@ -78,60 +78,20 @@ class TrafficSystemManager:
         self.start_time = None
         
     async def initialize(self):
-        """Initialize the traffic system with mock intersections"""
-        logger.info("Initializing traffic system...")
-        
-        # Create mock intersections for major cities
-        cities = ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix"]
-        intersection_count = 0
-        
-        for city in cities:
-            city_intersections = await self._create_city_intersections(city)
-            for intersection in city_intersections:
-                self.intersections[intersection.id] = intersection
-                intersection_count += 1
-        
-        self.system_metrics["total_intersections"] = intersection_count
+        """Initialize the traffic system.
+
+        Intentionally starts empty — the previous version of this method
+        fabricated 500-800 random intersections per city across 5 cities
+        with synthetic lat/lng pairs to back a "3000+ intersections"
+        marketing claim. The TrafficSimulator owns the actual
+        intersection grid used by the dashboard; this manager will be
+        populated from real OpenStreetMap data in the next iteration.
+        """
+        logger.info("Initializing traffic system manager (empty — populated by simulator + future OSM loader)")
         self.start_time = datetime.now()
         self.is_running = True
-        
-        logger.info(f"✅ Initialized {intersection_count} intersections across {len(cities)} cities")
-    
-    async def _create_city_intersections(self, city_name: str) -> List[Intersection]:
-        """Create mock intersections for a city"""
-        intersections = []
-        
-        # Generate 500-800 intersections per city
-        intersection_count = random.randint(500, 800)
-        
-        for i in range(intersection_count):
-            intersection = Intersection(
-                id=f"{city_name.lower().replace(' ', '_')}_int_{i:04d}",
-                name=f"{city_name} Intersection {i+1}",
-                location=(
-                    random.uniform(-90, 90),  # Latitude
-                    random.uniform(-180, 180)  # Longitude
-                ),
-                signal_states={},
-                timing_plan={},
-                traffic_volume={
-                    "north": random.randint(10, 100),
-                    "south": random.randint(10, 100),
-                    "east": random.randint(10, 100),
-                    "west": random.randint(10, 100)
-                },
-                wait_times={
-                    "north": random.uniform(10, 60),
-                    "south": random.uniform(10, 60),
-                    "east": random.uniform(10, 60),
-                    "west": random.uniform(10, 60)
-                },
-                last_updated=datetime.now(),
-                city=city_name
-            )
-            intersections.append(intersection)
-        
-        return intersections
+        self.system_metrics["total_intersections"] = len(self.intersections)
+        logger.info("✅ Traffic system manager ready")
     
     async def get_intersection_count(self) -> int:
         """Get total number of managed intersections"""

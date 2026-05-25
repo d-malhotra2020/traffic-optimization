@@ -370,7 +370,6 @@ async def get_monitoring_dashboard():
             "system_overview": {
                 "total_intersections": len(intersections),
                 "total_vehicles": len(vehicles),
-                "cities_served": system_metrics.get("cities_served", 5),
                 "system_uptime": system_metrics.get("system_uptime", 0),
                 "last_updated": datetime.now().isoformat()
             },
