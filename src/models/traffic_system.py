@@ -2,12 +2,18 @@ import asyncio
 import json
 import random
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Path to the committed OSM snapshot (regenerable via `python -m scripts.fetch_osm`)
+SF_INTERSECTIONS_SNAPSHOT = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "sf_intersections.json"
+)
 
 class SignalState(Enum):
     RED = "red"
@@ -63,10 +69,16 @@ class TrafficData:
     emergency_vehicles: int = 0
 
 class TrafficSystemManager:
-    """Manages the entire traffic control system"""
-    
+    """Manages the entire traffic control system.
+
+    Topology source: real OpenStreetMap signalized-intersection
+    coordinates for Downtown San Francisco, loaded from a committed
+    JSON snapshot at startup (regenerable via `python -m scripts.fetch_osm`).
+    """
+
     def __init__(self):
         self.intersections: Dict[str, Intersection] = {}
+        self.topology_meta: Dict = {}  # snapshot provenance (source/bbox/timestamps/etc.)
         self.traffic_data_history: List[TrafficData] = []
         self.system_metrics = {
             "total_intersections": 0,
@@ -78,20 +90,80 @@ class TrafficSystemManager:
         self.start_time = None
         
     async def initialize(self):
-        """Initialize the traffic system.
+        """Initialize the traffic system from the committed OSM snapshot.
 
-        Intentionally starts empty — the previous version of this method
-        fabricated 500-800 random intersections per city across 5 cities
-        with synthetic lat/lng pairs to back a "3000+ intersections"
-        marketing claim. The TrafficSimulator owns the actual
-        intersection grid used by the dashboard; this manager will be
-        populated from real OpenStreetMap data in the next iteration.
+        The snapshot at data/sf_intersections.json is fetched via the
+        Overpass API and committed to the repo so the app boots without
+        a runtime dependency on OSM. Regenerate with
+        `python -m scripts.fetch_osm`.
         """
-        logger.info("Initializing traffic system manager (empty — populated by simulator + future OSM loader)")
+        loaded = self._load_real_intersections()
+        if not loaded:
+            logger.warning(
+                "⚠️  OSM snapshot missing or malformed — TrafficSystemManager starts empty. "
+                "Run `python -m scripts.fetch_osm` to regenerate %s.",
+                SF_INTERSECTIONS_SNAPSHOT,
+            )
         self.start_time = datetime.now()
         self.is_running = True
         self.system_metrics["total_intersections"] = len(self.intersections)
-        logger.info("✅ Traffic system manager ready")
+        logger.info(
+            "✅ Traffic system manager ready — %d real intersections loaded from OSM",
+            len(self.intersections),
+        )
+
+    def _load_real_intersections(self) -> bool:
+        """Load signalized intersections from the committed OSM snapshot.
+
+        Returns True on success, False if the snapshot is missing or
+        malformed. Failure is non-fatal — the manager just starts empty.
+        """
+        try:
+            raw = json.loads(SF_INTERSECTIONS_SNAPSHOT.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.error("Failed to read OSM snapshot: %s", exc)
+            return False
+
+        nodes = raw.get("intersections", [])
+        if not isinstance(nodes, list):
+            logger.error("OSM snapshot malformed — `intersections` is not a list")
+            return False
+
+        self.intersections.clear()
+        for n in nodes:
+            try:
+                intersection = Intersection(
+                    id=n["id"],
+                    name=f"SF traffic signal @ {n['lat']:.4f},{n['lon']:.4f}",
+                    location=(n["lat"], n["lon"]),
+                    signal_states={},
+                    timing_plan={},
+                    traffic_volume={"north": 0, "south": 0, "east": 0, "west": 0},
+                    wait_times={"north": 0.0, "south": 0.0, "east": 0.0, "west": 0.0},
+                    last_updated=datetime.now(),
+                    city="San Francisco",
+                )
+                self.intersections[intersection.id] = intersection
+            except (KeyError, TypeError) as exc:
+                logger.warning("Skipping malformed node %r: %s", n, exc)
+
+        # Preserve provenance for the API to expose
+        self.topology_meta = {
+            "source": raw.get("source"),
+            "license": raw.get("license"),
+            "osm_timestamp": raw.get("osm_timestamp"),
+            "fetched_at": raw.get("fetched_at"),
+            "bbox": raw.get("bbox"),
+            "intersection_count": len(self.intersections),
+            "overpass_generator": raw.get("overpass_generator"),
+        }
+        return True
+
+    def get_topology_meta(self) -> Dict:
+        """Provenance + counts for /api/v1/system/topology."""
+        meta = dict(self.topology_meta)
+        meta["loaded_count"] = len(self.intersections)
+        return meta
     
     async def get_intersection_count(self) -> int:
         """Get total number of managed intersections"""

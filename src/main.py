@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 
-from .api.routes import traffic_router, optimization_router, monitoring_router
+from .api.routes import traffic_router, optimization_router, monitoring_router, system_router, bench_router
 from .simulation.traffic_simulator import TrafficSimulator
 from .optimization.signal_optimizer import SignalOptimizer
 from .models.traffic_system import TrafficSystemManager
@@ -75,6 +75,8 @@ app.add_middleware(
 app.include_router(traffic_router, prefix="/api/v1/traffic", tags=["Traffic Management"])
 app.include_router(optimization_router, prefix="/api/v1/optimization", tags=["Optimization"])
 app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["Monitoring"])
+app.include_router(system_router, prefix="/api/v1/system", tags=["System Topology"])
+app.include_router(bench_router, prefix="/api/v1/bench", tags=["Optimizer Bench"])
 
 @app.get("/")
 async def root():

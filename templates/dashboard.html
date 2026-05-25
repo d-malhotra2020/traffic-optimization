@@ -392,27 +392,27 @@
       </div>
     </div>
 
-    <!-- KPI tiles -->
+    <!-- KPI tiles: real headlines first, simulated second -->
     <section class="kpi-grid">
       <div class="kpi-tile">
-        <span class="kpi-label">// intersections</span>
+        <span class="kpi-label">// real intersections</span>
         <span class="kpi-value" id="kpiIntersections">--</span>
-        <span class="kpi-foot" id="kpiIntersectionsFoot">simulated grid</span>
+        <span class="kpi-foot" id="kpiIntersectionsFoot">OSM · downtown SF</span>
       </div>
       <div class="kpi-tile">
-        <span class="kpi-label">// active vehicles</span>
+        <span class="kpi-label">// bench throughput Δ</span>
+        <span class="kpi-value" id="kpiBench">--</span>
+        <span class="kpi-foot" id="kpiBenchFoot">measured · microsim</span>
+      </div>
+      <div class="kpi-tile">
+        <span class="kpi-label">// sim vehicles</span>
         <span class="kpi-value" id="kpiVehicles">--</span>
-        <span class="kpi-foot" id="kpiVehiclesFoot">simulated</span>
+        <span class="kpi-foot">simulated · queue model</span>
       </div>
       <div class="kpi-tile">
-        <span class="kpi-label">// avg speed</span>
+        <span class="kpi-label">// sim avg speed</span>
         <span class="kpi-value" id="kpiSpeed">--</span>
         <span class="kpi-foot">km/h · simulated</span>
-      </div>
-      <div class="kpi-tile">
-        <span class="kpi-label">// efficiency Δ</span>
-        <span class="kpi-value" id="kpiEff">--</span>
-        <span class="kpi-foot" id="kpiEffFoot">vs baseline (capped)</span>
       </div>
     </section>
 
@@ -436,6 +436,40 @@
           <div class="empty">// loading signal states…</div>
         </div>
       </article>
+    </section>
+
+    <!-- Optimizer bench (measured, not hardcoded) -->
+    <section class="panel" id="benchPanel" style="margin-bottom: var(--space-6);">
+      <header class="section-header">
+        <span class="section-label">// optimizer bench</span>
+        <span class="section-meta" id="benchMeta">corridor microsim · loading…</span>
+      </header>
+      <div id="benchBody" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5);">
+        <div>
+          <div class="kpi-label" style="margin-bottom: var(--space-1);">// throughput</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-primary);">
+            <span id="benchTpAdaptive">--</span> <span style="color: var(--text-mute);">vs</span> <span id="benchTpFixed">--</span> <span style="color: var(--text-mute);">veh/min</span>
+          </div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-mute); margin-top: 2px;">
+            adaptive vs fixed-time
+          </div>
+        </div>
+        <div>
+          <div class="kpi-label" style="margin-bottom: var(--space-1);">// avg wait</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-primary);">
+            <span id="benchWaitAdaptive">--</span> <span style="color: var(--text-mute);">vs</span> <span id="benchWaitFixed">--</span> <span style="color: var(--text-mute);">s</span>
+          </div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-mute); margin-top: 2px;">
+            per cleared vehicle
+          </div>
+        </div>
+        <div>
+          <div class="kpi-label" style="margin-bottom: var(--space-1);">// method</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary); line-height: 1.5;" id="benchMethod">
+            --
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Optimizer log + alerts -->
@@ -463,8 +497,9 @@
     <!-- Honesty footer -->
     <section class="reality-card" aria-label="system reality">
       <span class="footer-label">// system reality</span>
-      <p>All vehicles, queues, and metrics below are produced by an <strong>in-process simulator</strong> — there is no live sensor input. The intersection set is a 12×12 grid of synthetic positions for demo purposes. The next commit replaces this with real <strong>OpenStreetMap</strong> signalized-intersection topology for Downtown San Francisco.</p>
-      <p>The "optimizer" is <strong>rule-based</strong> (queue-balancing, pattern-adaptive, efficiency-boost, congestion-relief) — <strong>not</strong> a trained ML model. The "94% accuracy" and "15% efficiency improvement" numbers shown elsewhere are hardcoded baselines from earlier scaffolding; a measurable Δ from a microsim benchmark is shipping next.</p>
+      <p><strong>Topology is real.</strong> The <span id="footerCount">--</span> intersections referenced above are real signalized-intersection locations in downtown San Francisco, fetched from <strong>OpenStreetMap</strong> via the Overpass API (ODbL — © OSM contributors). Snapshot is committed to the repo at <code>data/sf_intersections.json</code>; regenerable with <code>python -m scripts.fetch_osm</code>.</p>
+      <p><strong>Optimizer Δ is measured.</strong> The <code>// optimizer bench</code> panel above runs a Poisson-arrival corridor microsim — adaptive rule-based timing vs fixed-time baseline — and reports the actual throughput / avg-wait delta from <span id="footerTrials">--</span> trials. Results live at <code>data/bench_results.json</code>; regenerable with <code>python -m src.bench.microsim</code>.</p>
+      <p><strong>Vehicles + queues are simulated.</strong> The "active vehicles," queue lengths, and signal-state list come from an in-process queue dynamics model — no live sensor input. The optimizer is rule-based (queue-balancing + pattern-adaptive + efficiency-boost + congestion-relief), <strong>not</strong> a trained ML model.</p>
     </section>
   </main>
 
@@ -536,19 +571,22 @@
 
     // ============ FETCH + RENDER ============
     async function fetchAll() {
-      const [metrics, intersections, history, opts, alerts] = await Promise.all([
+      const [metrics, intersections, history, opts, alerts, topology, bench] = await Promise.all([
         safeJson('/api/v1/traffic/metrics'),
         safeJson('/api/v1/traffic/intersections?limit=200'),
         safeJson('/api/v1/monitoring/metrics/history?minutes=30'),
         safeJson('/api/v1/optimization/optimize?limit=20'),
-        safeJson('/api/v1/monitoring/alerts')
+        safeJson('/api/v1/monitoring/alerts'),
+        safeJson('/api/v1/system/topology'),
+        safeJson('/api/v1/bench/results')
       ]);
 
-      if (metrics?.current_metrics) renderKpis(metrics.current_metrics, intersections);
+      if (metrics?.current_metrics) renderKpis(metrics.current_metrics, intersections, topology, bench);
       renderChart(history);
       renderSignals(intersections);
       renderOptimizations(opts);
       renderAlerts(alerts);
+      renderBench(bench);
       document.getElementById('lastUpdated').textContent =
         `// last update ${new Date().toLocaleTimeString('en-US', { hour12: false })}`;
     }
@@ -557,15 +595,64 @@
       try { const r = await fetch(url); return r.ok ? r.json() : null; } catch { return null; }
     }
 
-    function renderKpis(m, intersections) {
-      const intCount = intersections?.total_intersections ?? '--';
-      document.getElementById('kpiIntersections').textContent = intCount;
-      document.getElementById('intCount').textContent = intCount;
+    function renderKpis(m, intersections, topology, bench) {
+      // KPI 1: real OSM intersection count (topology endpoint)
+      const realCount = topology?.intersection_count ?? topology?.loaded_count ?? '--';
+      document.getElementById('kpiIntersections').textContent = realCount;
+      document.getElementById('intCount').textContent = realCount;
+      const footerCount = document.getElementById('footerCount');
+      if (footerCount) footerCount.textContent = realCount;
+      if (topology?.bbox?.description) {
+        document.getElementById('kpiIntersectionsFoot').textContent = `OSM · ${topology.bbox.description.split(' — ')[0]}`;
+      }
+
+      // KPI 2: measured bench throughput delta (real microsim)
+      if (bench?.delta?.throughput_per_min) {
+        const pct = bench.delta.throughput_per_min.pct_delta;
+        const sign = pct >= 0 ? '+' : '';
+        document.getElementById('kpiBench').textContent = `${sign}${pct.toFixed(1)}%`;
+        document.getElementById('kpiBench').style.color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+        const trials = bench.summary?.adaptive?.throughput_per_min?.n ?? '--';
+        document.getElementById('kpiBenchFoot').textContent = `measured · ${trials} trials × 2`;
+      } else {
+        document.getElementById('kpiBench').textContent = '—';
+        document.getElementById('kpiBenchFoot').textContent = 'bench not yet run';
+      }
+
+      // KPI 3/4: simulator numbers (clearly labeled)
       document.getElementById('kpiVehicles').textContent = m.total_vehicles ?? '--';
       document.getElementById('vehCount').textContent = m.total_vehicles ?? '--';
       document.getElementById('kpiSpeed').textContent = (m.average_speed ?? 0).toFixed(1);
       document.getElementById('congPct').textContent = `${((m.congestion_level ?? 0) * 100).toFixed(0)}%`;
-      document.getElementById('kpiEff').textContent = `${(m.efficiency_improvement ?? 0).toFixed(1)}%`;
+    }
+
+    function renderBench(bench) {
+      const meta = document.getElementById('benchMeta');
+      // Update footer trial count from bench
+      const trials = bench?.params?.trials;
+      if (trials) {
+        document.getElementById('footerTrials').textContent = `${trials} × 2`;
+      }
+      if (!bench?.delta) {
+        meta.textContent = 'bench results not yet generated';
+        return;
+      }
+      const tp = bench.delta.throughput_per_min;
+      const wt = bench.delta.avg_wait_seconds;
+      const params = bench.params ?? {};
+      const trials = params.trials ?? '?';
+      const simMin = params.sim_seconds ? (params.sim_seconds / 60).toFixed(0) : '?';
+      const n = params.corridor_intersections ?? '?';
+
+      document.getElementById('benchTpAdaptive').textContent = tp.adaptive_mean.toFixed(1);
+      document.getElementById('benchTpFixed').textContent = tp.fixed_mean.toFixed(1);
+      document.getElementById('benchWaitAdaptive').textContent = wt.adaptive_mean.toFixed(0);
+      document.getElementById('benchWaitFixed').textContent = wt.fixed_mean.toFixed(0);
+      document.getElementById('benchMethod').innerHTML =
+        `${n}-intersection corridor<br/>Poisson arrivals @ ${(params.ew_arrival_rate_peak ?? 0).toFixed(2)} veh/s<br/>${trials} trials × ${simMin} min sim<br/>adaptive: rule-based queue-balancing`;
+      const tpPct = tp.pct_delta;
+      const wtPct = wt.pct_delta;
+      meta.textContent = `microsim · adaptive ${tpPct >= 0 ? '+' : ''}${tpPct.toFixed(1)}% tp · ${wtPct >= 0 ? '+' : ''}${wtPct.toFixed(1)}% wait`;
     }
 
     function renderChart(history) {

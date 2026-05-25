@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-05-25T00:51:55.702870+00:00",
+  "params": {
+    "corridor_intersections": 5,
+    "sim_seconds": 1800,
+    "trials": 40,
+    "tick_seconds": 1.0,
+    "ew_arrival_rate_peak": 0.4,
+    "ns_arrival_rate": 0.06,
+    "saturation_flow_rate": 0.5,
+    "link_travel_seconds": 8.0,
+    "warmup_seconds": 120.0,
+    "fixed_timing": {
+      "ew_green": 45,
+      "ns_green": 45,
+      "yellow": 5,
+      "all_red": 2
+    },
+    "adaptive": {
+      "recompute_interval_s": 30.0,
+      "min_green": 25,
+      "max_green": 70,
+      "yellow": 5,
+      "all_red": 2
+    },
+    "seed_base": 20260524
+  },
+  "summary": {
+    "fixed": {
+      "throughput_per_min": {
+        "mean": 11.954464285714286,
+        "stdev": 0.3919622518658589,
+        "n": 40
+      },
+      "avg_wait_seconds": {
+        "mean": 521.3964016071428,
+        "stdev": 27.625968788443572,
+        "n": 40
+      },
+      "max_queue": {
+        "mean": 328.85,
+        "stdev": 26.080212805880247,
+        "n": 40
+      },
+      "cleared_vehicles": {
+        "mean": 334.725,
+        "stdev": 10.974943052244052,
+        "n": 40
+      }
+    },
+    "adaptive": {
+      "throughput_per_min": {
+        "mean": 14.13125,
+        "stdev": 0.32521455829739765,
+        "n": 40
+      },
+      "avg_wait_seconds": {
+        "mean": 464.92751277827085,
+        "stdev": 25.72235382416371,
+        "n": 40
+      },
+      "max_queue": {
+        "mean": 241.275,
+        "stdev": 22.83088642606765,
+        "n": 40
+      },
+      "cleared_vehicles": {
+        "mean": 395.675,
+        "stdev": 9.106007632327133,
+        "n": 40
+      }
+    }
+  },
+  "delta": {
+    "throughput_per_min": {
+      "fixed_mean": 11.954464285714286,
+      "adaptive_mean": 14.13125,
+      "abs_delta": 2.176785714285714,
+      "pct_delta": 18.20897751885876
+    },
+    "avg_wait_seconds": {
+      "fixed_mean": 521.3964016071428,
+      "adaptive_mean": 464.92751277827085,
+      "abs_delta": -56.46888882887197,
+      "pct_delta": -10.830318094795684
+    },
+    "max_queue": {
+      "fixed_mean": 328.85,
+      "adaptive_mean": 241.275,
+      "abs_delta": -87.57500000000002,
+      "pct_delta": -26.630682682073896
+    }
+  },
+  "interpretation": "Throughput: 14.1 vs 12.0 veh/min (+18.2%). Avg wait: 464.9 vs 521.4 s (-10.8%)."
+}

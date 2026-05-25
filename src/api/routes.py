@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List, Dict
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from ..simulation.traffic_simulator import TrafficMetrics
 
@@ -11,6 +13,13 @@ logger = logging.getLogger(__name__)
 traffic_router = APIRouter()
 optimization_router = APIRouter()
 monitoring_router = APIRouter()
+system_router = APIRouter()
+bench_router = APIRouter()
+
+# Path to the committed microsim results (regenerable via `python -m src.bench.microsim`)
+BENCH_RESULTS_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "bench_results.json"
+)
 
 # Traffic Management Endpoints
 
@@ -469,6 +478,48 @@ async def get_metrics_history(minutes: int = Query(60, description="Minutes of h
     except Exception as e:
         logger.error(f"Error getting metrics history: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve metrics history")
+
+@system_router.get("/topology")
+async def get_topology():
+    """Real OpenStreetMap signalized-intersection topology metadata.
+
+    Provenance: data/sf_intersections.json (regenerate via
+    `python -m scripts.fetch_osm`). License: ODbL — © OpenStreetMap
+    contributors.
+    """
+    try:
+        from ..main import traffic_system
+        meta = traffic_system.get_topology_meta()
+        # Sample a few intersections so the UI can render a tiny map preview
+        sample = []
+        for intersection in list(traffic_system.intersections.values())[:25]:
+            sample.append({
+                "id": intersection.id,
+                "lat": intersection.location[0],
+                "lon": intersection.location[1],
+            })
+        meta["sample"] = sample
+        return meta
+    except Exception as e:
+        logger.error(f"Error getting topology: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load topology metadata")
+
+
+@bench_router.get("/results")
+async def get_bench_results():
+    """Measured microsim results — rule-based optimizer vs fixed-time baseline.
+
+    Source: data/bench_results.json (regenerate via
+    `python -m src.bench.microsim`). All numbers are produced by a
+    Poisson-arrival corridor microsim, not hardcoded.
+    """
+    try:
+        raw = json.loads(BENCH_RESULTS_PATH.read_text())
+        return raw
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error(f"bench results unavailable: {e}")
+        raise HTTPException(status_code=503, detail="Bench results not yet generated")
+
 
 @monitoring_router.get("/alerts")
 async def get_system_alerts():
