@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-05-25T01:04:19.064294+00:00",
+  "params": {
+    "rates": [
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6
+    ],
+    "trials_per_point": 25,
+    "sim_seconds_per_trial": 1200,
+    "corridor_intersections": 5,
+    "saturation_flow_rate": 0.5,
+    "ns_arrival_rate": 0.06
+  },
+  "points": [
+    {
+      "arrival_rate": 0.2,
+      "fixed_throughput": 10.96888888888889,
+      "adaptive_throughput": 10.81111111111111,
+      "throughput_pct_delta": -1.4384116693679234,
+      "fixed_avg_wait": 142.04487899884418,
+      "adaptive_avg_wait": 168.5363628749896,
+      "wait_pct_delta": 18.650080216099155
+    },
+    {
+      "arrival_rate": 0.3,
+      "fixed_throughput": 11.76,
+      "adaptive_throughput": 13.242222222222221,
+      "throughput_pct_delta": 12.60393046107331,
+      "fixed_avg_wait": 284.4657273474776,
+      "adaptive_avg_wait": 256.7874764189128,
+      "wait_pct_delta": -9.729907074097387
+    },
+    {
+      "arrival_rate": 0.4,
+      "fixed_throughput": 11.848888888888888,
+      "adaptive_throughput": 13.626666666666667,
+      "throughput_pct_delta": 15.003750937734441,
+      "fixed_avg_wait": 365.09249267310474,
+      "adaptive_avg_wait": 347.2720520808029,
+      "wait_pct_delta": -4.88107560410941
+    },
+    {
+      "arrival_rate": 0.5,
+      "fixed_throughput": 11.717777777777778,
+      "adaptive_throughput": 13.435555555555556,
+      "throughput_pct_delta": 14.65958657310829,
+      "fixed_avg_wait": 417.91048694725737,
+      "adaptive_avg_wait": 404.4736966473109,
+      "wait_pct_delta": -3.215231663148547
+    },
+    {
+      "arrival_rate": 0.6,
+      "fixed_throughput": 11.78,
+      "adaptive_throughput": 13.751111111111111,
+      "throughput_pct_delta": 16.732691944916063,
+      "fixed_avg_wait": 452.7134426256562,
+      "adaptive_avg_wait": 446.27762024436,
+      "wait_pct_delta": -1.4216106206101677
+    }
+  ]
+}

@@ -33,13 +33,18 @@ class Intersection:
 
 @dataclass
 class TrafficMetrics:
-    """Traffic system metrics"""
+    """In-process simulator metrics — vehicles, speed, queues, throughput.
+
+    The legacy `prediction_accuracy` field was dropped (it was a hardcoded
+    0.94 with bounded random noise; not a real measurement). Real
+    optimizer Δ is measured by src/bench/microsim.py and exposed via
+    /api/v1/bench/results.
+    """
     total_vehicles: int
     average_speed: float
     congestion_level: float
     throughput: int
     efficiency_improvement: float
-    prediction_accuracy: float
 
 class TrafficSimulator:
     """Advanced traffic simulation engine with real-time data generation"""
@@ -248,7 +253,7 @@ class TrafficSimulator:
     async def _calculate_metrics(self) -> TrafficMetrics:
         """Calculate overall traffic system metrics"""
         if not self.vehicles:
-            return TrafficMetrics(0, 0, 0, 0, 0, 0.94)
+            return TrafficMetrics(0, 0, 0, 0, 0)
         
         # Calculate average speed
         avg_speed = sum(v.speed for v in self.vehicles.values()) / len(self.vehicles)
@@ -264,16 +269,12 @@ class TrafficSimulator:
         efficiency_improvement = max(0, (total_throughput - baseline_throughput) / baseline_throughput * 100)
         efficiency_improvement = min(20, efficiency_improvement)  # Cap at 20%
         
-        # ML prediction accuracy (simulated as stable high value with small variation)
-        prediction_accuracy = 0.94 + random.uniform(-0.02, 0.02)
-        
         return TrafficMetrics(
             total_vehicles=len(self.vehicles),
             average_speed=avg_speed,
             congestion_level=congestion_level,
             throughput=total_throughput,
             efficiency_improvement=efficiency_improvement,
-            prediction_accuracy=prediction_accuracy
         )
     
     # Public API methods

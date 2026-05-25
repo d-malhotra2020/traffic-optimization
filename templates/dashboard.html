@@ -438,6 +438,23 @@
       </article>
     </section>
 
+    <!-- OSM topology map: real intersections in downtown SF -->
+    <section class="panel" id="topoPanel" style="margin-bottom: var(--space-6);">
+      <header class="section-header">
+        <span class="section-label">// topology · downtown sf</span>
+        <span class="section-meta" id="topoMeta">loading…</span>
+      </header>
+      <div id="topoMapWrap" style="background: var(--bg-deep); border: 1px solid var(--hairline); padding: var(--space-3); position: relative;">
+        <svg id="topoMap" viewBox="0 0 800 360" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 360px; display: block;">
+          <text x="400" y="180" text-anchor="middle" fill="#555560" font-family="JetBrains Mono" font-size="11">// loading OSM topology…</text>
+        </svg>
+      </div>
+      <div style="display: flex; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-mute);">
+        <span id="topoBBoxLabel">--</span>
+        <span id="topoLicense">--</span>
+      </div>
+    </section>
+
     <!-- Optimizer bench (measured, not hardcoded) -->
     <section class="panel" id="benchPanel" style="margin-bottom: var(--space-6);">
       <header class="section-header">
@@ -470,6 +487,23 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- Bench sweep: Δ across arrival rates -->
+    <section class="panel" id="sweepPanel" style="margin-bottom: var(--space-6);">
+      <header class="section-header">
+        <span class="section-label">// optimizer Δ vs load</span>
+        <span class="section-meta" id="sweepMeta">corridor microsim · loading…</span>
+      </header>
+      <div style="background: var(--bg-deep); border: 1px solid var(--hairline); padding: var(--space-3); position: relative;">
+        <canvas id="sweepChart" style="width: 100%; height: 220px;"></canvas>
+      </div>
+      <p style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-mute); margin-top: var(--space-2); line-height: 1.5;">
+        x: peak E-W arrival rate (veh/s) · y: throughput delta vs fixed-time baseline (%).
+        Optimizer helps at moderate-to-heavy load; at light load there's not enough queue signal
+        to act on and the heuristic slightly hurts. This honest curve is more useful than a single
+        peak-rate Δ — it shows where the strategy works and where it doesn't.
+      </p>
     </section>
 
     <!-- Optimizer log + alerts -->
@@ -571,14 +605,15 @@
 
     // ============ FETCH + RENDER ============
     async function fetchAll() {
-      const [metrics, intersections, history, opts, alerts, topology, bench] = await Promise.all([
+      const [metrics, intersections, history, opts, alerts, topology, bench, sweep] = await Promise.all([
         safeJson('/api/v1/traffic/metrics'),
         safeJson('/api/v1/traffic/intersections?limit=200'),
         safeJson('/api/v1/monitoring/metrics/history?minutes=30'),
         safeJson('/api/v1/optimization/optimize?limit=20'),
         safeJson('/api/v1/monitoring/alerts'),
         safeJson('/api/v1/system/topology'),
-        safeJson('/api/v1/bench/results')
+        safeJson('/api/v1/bench/results'),
+        safeJson('/api/v1/bench/sweep')
       ]);
 
       if (metrics?.current_metrics) renderKpis(metrics.current_metrics, intersections, topology, bench);
@@ -587,6 +622,8 @@
       renderOptimizations(opts);
       renderAlerts(alerts);
       renderBench(bench);
+      renderTopologyMap(topology);
+      renderSweep(sweep);
       document.getElementById('lastUpdated').textContent =
         `// last update ${new Date().toLocaleTimeString('en-US', { hour12: false })}`;
     }
@@ -624,6 +661,153 @@
       document.getElementById('vehCount').textContent = m.total_vehicles ?? '--';
       document.getElementById('kpiSpeed').textContent = (m.average_speed ?? 0).toFixed(1);
       document.getElementById('congPct').textContent = `${((m.congestion_level ?? 0) * 100).toFixed(0)}%`;
+    }
+
+    // ============ SWEEP CHART ============
+    let sweepChart;
+    let sweepRendered = false;
+
+    function renderSweep(sweep) {
+      if (!sweep?.points) {
+        document.getElementById('sweepMeta').textContent = 'sweep not yet generated';
+        return;
+      }
+      const meta = document.getElementById('sweepMeta');
+      const points = sweep.points;
+      const trials = sweep.params?.trials_per_point ?? '?';
+      const simMin = sweep.params?.sim_seconds_per_trial ? (sweep.params.sim_seconds_per_trial / 60).toFixed(0) : '?';
+      meta.textContent = `${points.length} arrival rates · ${trials} trials × ${simMin} min sim each`;
+
+      if (sweepRendered) return;  // sweep is static — render once
+      sweepRendered = true;
+
+      const ctx = document.getElementById('sweepChart').getContext('2d');
+      sweepChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: points.map(p => p.arrival_rate.toFixed(2)),
+          datasets: [
+            {
+              label: 'throughput Δ %',
+              data: points.map(p => Math.round(p.throughput_pct_delta * 10) / 10),
+              backgroundColor: points.map(p => p.throughput_pct_delta >= 0 ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)'),
+              borderColor: points.map(p => p.throughput_pct_delta >= 0 ? '#22c55e' : '#ef4444'),
+              borderWidth: 1,
+            },
+            {
+              label: 'wait Δ % (inverted: -ve better)',
+              data: points.map(p => Math.round(p.wait_pct_delta * 10) / 10),
+              backgroundColor: points.map(p => p.wait_pct_delta <= 0 ? 'rgba(34,197,94,0.30)' : 'rgba(239,68,68,0.30)'),
+              borderColor: points.map(p => p.wait_pct_delta <= 0 ? '#22c55e' : '#ef4444'),
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#8a8a92', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 14, boxHeight: 10, padding: 12 } },
+            tooltip: { backgroundColor: '#16161a', borderColor: '#2a2a2f', borderWidth: 1, titleFont: { family: 'JetBrains Mono', size: 10 }, bodyFont: { family: 'JetBrains Mono', size: 11 } }
+          },
+          scales: {
+            x: { ticks: { color: '#555560', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1f1f23' }, title: { display: true, text: 'arrival rate (veh/s)', color: '#555560', font: { family: 'JetBrains Mono', size: 10 } } },
+            y: { ticks: { color: '#555560', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1f1f23' }, title: { display: true, text: 'Δ vs fixed-time (%)', color: '#555560', font: { family: 'JetBrains Mono', size: 10 } } }
+          }
+        }
+      });
+    }
+
+    // ============ TOPOLOGY MAP ============
+    // Renders all 664 (or however many) OSM intersection coords as small dots
+    // in a 800×360 SVG viewport, projecting lat/lng inside the snapshot bbox.
+    let topoRendered = false;  // only re-render if topology data changes shape
+    let lastTopoSig = '';
+
+    function renderTopologyMap(topology) {
+      const svg = document.getElementById('topoMap');
+      const meta = document.getElementById('topoMeta');
+      const bboxLabel = document.getElementById('topoBBoxLabel');
+      const license = document.getElementById('topoLicense');
+      if (!svg) return;
+
+      if (!topology || !topology.bbox || !Array.isArray(topology.coords)) {
+        meta.textContent = 'topology unavailable';
+        return;
+      }
+
+      const sig = `${topology.coords.length}|${topology.osm_timestamp}`;
+      if (sig === lastTopoSig) return;
+      lastTopoSig = sig;
+
+      const W = 800, H = 360, PAD = 16;
+      const { south, west, north, east, description } = topology.bbox;
+      const latSpan = north - south;
+      const lonSpan = east - west;
+
+      // Adjust for SF latitude — at ~37.78° N, 1° lon ≈ cos(lat) × 1° lat distance.
+      // Without correction the map looks horizontally stretched. Compute aspect.
+      const latMid = (north + south) / 2;
+      const cosLat = Math.cos(latMid * Math.PI / 180);
+      // Map-aspect-corrected: 1 degree lon takes cosLat times as much screen as 1 degree lat
+      const drawableW = W - 2 * PAD;
+      const drawableH = H - 2 * PAD;
+      const lonScale = drawableW / (lonSpan * cosLat);
+      const latScale = drawableH / latSpan;
+      const scale = Math.min(lonScale, latScale);
+      // Center the map
+      const mapW = lonSpan * cosLat * scale;
+      const mapH = latSpan * scale;
+      const offX = PAD + (drawableW - mapW) / 2;
+      const offY = PAD + (drawableH - mapH) / 2;
+
+      const project = (lat, lon) => {
+        const x = offX + (lon - west) * cosLat * scale;
+        const y = offY + (north - lat) * scale;  // SVG y down
+        return [x, y];
+      };
+
+      // Build dots
+      const dots = topology.coords.map(([lat, lon]) => {
+        const [x, y] = project(lat, lon);
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.6" fill="#22c55e" fill-opacity="0.65" />`;
+      }).join('');
+
+      // Subtle background grid lines
+      const gridLines = [];
+      for (let i = 1; i < 8; i++) {
+        const x = offX + (mapW * i / 8);
+        gridLines.push(`<line x1="${x.toFixed(1)}" y1="${offY}" x2="${x.toFixed(1)}" y2="${(offY+mapH).toFixed(1)}" stroke="#1f1f23" stroke-width="0.5" />`);
+      }
+      for (let i = 1; i < 5; i++) {
+        const y = offY + (mapH * i / 5);
+        gridLines.push(`<line x1="${offX}" y1="${y.toFixed(1)}" x2="${(offX+mapW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#1f1f23" stroke-width="0.5" />`);
+      }
+
+      // BBox outline
+      const bboxRect = `<rect x="${offX.toFixed(1)}" y="${offY.toFixed(1)}" width="${mapW.toFixed(1)}" height="${mapH.toFixed(1)}" fill="none" stroke="#2a2a2f" stroke-width="1" />`;
+
+      // Scale bar — approx 500m
+      const metersPerDegLat = 111000;
+      const scaleM = 500;
+      const scalePx = (scaleM / metersPerDegLat) * scale;
+      const sbX = offX + 8;
+      const sbY = offY + mapH - 10;
+      const scaleBar = `
+        <line x1="${sbX.toFixed(1)}" y1="${sbY.toFixed(1)}" x2="${(sbX + scalePx).toFixed(1)}" y2="${sbY.toFixed(1)}" stroke="#8a8a92" stroke-width="1.5" />
+        <text x="${(sbX + scalePx / 2).toFixed(1)}" y="${(sbY - 4).toFixed(1)}" text-anchor="middle" fill="#8a8a92" font-family="JetBrains Mono" font-size="9">500 m</text>
+      `;
+
+      // Compass marker
+      const compass = `
+        <text x="${(W - PAD).toFixed(1)}" y="${(PAD + 12).toFixed(1)}" text-anchor="end" fill="#555560" font-family="JetBrains Mono" font-size="9">N ↑</text>
+      `;
+
+      svg.innerHTML = gridLines.join('') + bboxRect + dots + scaleBar + compass;
+
+      meta.textContent = `${topology.coords.length} intersections · OpenStreetMap`;
+      bboxLabel.textContent = `bbox: ${south.toFixed(4)}, ${west.toFixed(4)} → ${north.toFixed(4)}, ${east.toFixed(4)}`;
+      license.textContent = topology.license ?? '';
     }
 
     function renderBench(bench) {

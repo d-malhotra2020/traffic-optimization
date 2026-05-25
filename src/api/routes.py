@@ -20,6 +20,9 @@ bench_router = APIRouter()
 BENCH_RESULTS_PATH = (
     Path(__file__).resolve().parent.parent.parent / "data" / "bench_results.json"
 )
+BENCH_SWEEP_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "bench_sweep.json"
+)
 
 # Traffic Management Endpoints
 
@@ -151,7 +154,6 @@ async def get_traffic_metrics():
                 "congestion_level": round(metrics.congestion_level, 3),
                 "throughput": metrics.throughput,
                 "efficiency_improvement": round(metrics.efficiency_improvement, 2),
-                "prediction_accuracy": round(metrics.prediction_accuracy, 3)
             },
             "timestamp": datetime.now().isoformat()
         }
@@ -346,7 +348,10 @@ async def get_congestion_hotspots():
         return {
             "congestion_hotspots": hotspots,
             "hotspot_count": len(hotspots),
-            "prediction_accuracy": congestion_predictor.model_accuracy,
+            "estimator": {
+                "kind": congestion_predictor.kind,
+                "description": congestion_predictor.description,
+            },
             "last_updated": datetime.now().isoformat()
         }
         
@@ -371,10 +376,9 @@ async def get_monitoring_dashboard():
         intersections = await simulator.get_intersections()
         vehicles = await simulator.get_vehicles()
         
-        # ML model metrics
+        # Heuristic estimators (formerly mislabeled as "ML models")
         from ...ml_models import traffic_flow_predictor, congestion_predictor, pattern_recognition
-        model_metrics = await traffic_flow_predictor.get_model_metrics()
-        
+
         dashboard_data = {
             "system_overview": {
                 "total_intersections": len(intersections),
@@ -387,29 +391,18 @@ async def get_monitoring_dashboard():
                 "congestion_level": round(current_metrics.congestion_level, 3),
                 "throughput": current_metrics.throughput,
                 "efficiency_improvement": round(current_metrics.efficiency_improvement, 2),
-                "prediction_accuracy": round(current_metrics.prediction_accuracy, 3)
             },
             "optimization_status": {
                 "total_optimizations": optimization_stats.get("total_optimizations", 0),
                 "average_improvement": round(optimization_stats.get("average_improvement", 0), 2),
                 "average_confidence": round(optimization_stats.get("average_confidence", 0), 3),
-                "ml_model_accuracy": optimization_stats.get("ml_model_accuracy", 0.94)
+                "kind": "rule-based",
             },
-            "ml_models": {
-                "traffic_predictor": {
-                    "accuracy": round(model_metrics.accuracy, 3),
-                    "training_samples": model_metrics.training_samples,
-                    "last_trained": model_metrics.last_trained.isoformat()
-                },
-                "congestion_predictor": {
-                    "accuracy": congestion_predictor.model_accuracy,
-                    "model_type": congestion_predictor.model_type
-                },
-                "pattern_recognition": {
-                    "accuracy": pattern_recognition.model_accuracy,
-                    "known_patterns": len(pattern_recognition.pattern_library)
-                }
-            }
+            "estimators": {
+                "kind": traffic_flow_predictor.metrics.kind,
+                "description": traffic_flow_predictor.metrics.description,
+                "known_patterns": len(pattern_recognition.pattern_library),
+            },
         }
         
         return dashboard_data
@@ -480,25 +473,25 @@ async def get_metrics_history(minutes: int = Query(60, description="Minutes of h
         raise HTTPException(status_code=500, detail="Failed to retrieve metrics history")
 
 @system_router.get("/topology")
-async def get_topology():
+async def get_topology(include_coords: bool = Query(True, description="Include all intersection coords for client-side map rendering")):
     """Real OpenStreetMap signalized-intersection topology metadata.
 
     Provenance: data/sf_intersections.json (regenerate via
     `python -m scripts.fetch_osm`). License: ODbL — © OpenStreetMap
     contributors.
+
+    By default returns all intersection coordinates (~30 KB for SF
+    downtown) so the dashboard can render every dot, not a sample.
+    Pass include_coords=false to get just the metadata.
     """
     try:
         from ..main import traffic_system
         meta = traffic_system.get_topology_meta()
-        # Sample a few intersections so the UI can render a tiny map preview
-        sample = []
-        for intersection in list(traffic_system.intersections.values())[:25]:
-            sample.append({
-                "id": intersection.id,
-                "lat": intersection.location[0],
-                "lon": intersection.location[1],
-            })
-        meta["sample"] = sample
+        if include_coords:
+            meta["coords"] = [
+                [round(intersection.location[0], 6), round(intersection.location[1], 6)]
+                for intersection in traffic_system.intersections.values()
+            ]
         return meta
     except Exception as e:
         logger.error(f"Error getting topology: {e}")
@@ -519,6 +512,23 @@ async def get_bench_results():
     except (OSError, json.JSONDecodeError) as e:
         logger.error(f"bench results unavailable: {e}")
         raise HTTPException(status_code=503, detail="Bench results not yet generated")
+
+
+@bench_router.get("/sweep")
+async def get_bench_sweep():
+    """Microsim Δ across a peak-arrival-rate sweep.
+
+    Source: data/bench_sweep.json. Shows where the rule-based
+    optimizer helps and where it doesn't — at light load there's
+    not enough queue signal to act on, so the optimizer slightly
+    hurts; at moderate-to-heavy load it wins meaningfully.
+    """
+    try:
+        raw = json.loads(BENCH_SWEEP_PATH.read_text())
+        return raw
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error(f"bench sweep unavailable: {e}")
+        raise HTTPException(status_code=503, detail="Bench sweep not yet generated")
 
 
 @monitoring_router.get("/alerts")

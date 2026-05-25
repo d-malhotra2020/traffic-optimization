@@ -53,6 +53,12 @@ from typing import Dict, List, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 RESULTS_PATH = ROOT / "data" / "bench_results.json"
+SWEEP_PATH = ROOT / "data" / "bench_sweep.json"
+
+# Parameter sweep — same model, varying peak arrival rate
+SWEEP_RATES = [0.20, 0.30, 0.40, 0.50, 0.60]
+SWEEP_TRIALS = 25
+SWEEP_SIM_SECONDS = 1200
 
 # ---------- Default parameters (committed so results are reproducible) ----------
 
@@ -339,6 +345,43 @@ def _interpret(delta: Dict[str, Dict[str, float]]) -> str:
     return " ".join(parts)
 
 
+def run_sweep(rates=SWEEP_RATES, trials=SWEEP_TRIALS, sim_seconds=SWEEP_SIM_SECONDS) -> dict:
+    """Sweep the peak arrival rate; produce Δ throughput / wait per rate.
+
+    Smaller trial count + sim duration than the main bench because we're
+    measuring a curve, not a single point. The shape of the curve matters
+    more than the exact value at any one rate.
+    """
+    points = []
+    for rate in rates:
+        params = {**DEFAULTS, "trials": trials, "sim_seconds": sim_seconds, "ew_arrival_rate_peak": rate}
+        results = run(params)
+        tp = results["delta"]["throughput_per_min"]
+        wt = results["delta"]["avg_wait_seconds"]
+        points.append({
+            "arrival_rate": rate,
+            "fixed_throughput": tp["fixed_mean"],
+            "adaptive_throughput": tp["adaptive_mean"],
+            "throughput_pct_delta": tp["pct_delta"],
+            "fixed_avg_wait": wt["fixed_mean"],
+            "adaptive_avg_wait": wt["adaptive_mean"],
+            "wait_pct_delta": wt["pct_delta"],
+        })
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "params": {
+            "rates": rates,
+            "trials_per_point": trials,
+            "sim_seconds_per_trial": sim_seconds,
+            "corridor_intersections": DEFAULTS["corridor_intersections"],
+            "saturation_flow_rate": DEFAULTS["saturation_flow_rate"],
+            "ns_arrival_rate": DEFAULTS["ns_arrival_rate"],
+        },
+        "points": points,
+    }
+
+
 def main() -> int:
     print(f"→ Running microsim bench: {DEFAULTS['trials']} trials × 2 strategies "
           f"× {DEFAULTS['sim_seconds']}s sim time…")
@@ -347,6 +390,18 @@ def main() -> int:
     RESULTS_PATH.write_text(json.dumps(results, indent=2))
     print(f"✓ Wrote {RESULTS_PATH.relative_to(ROOT)}")
     print(f"  {results['interpretation']}")
+
+    print(f"\n→ Running arrival-rate sweep: {len(SWEEP_RATES)} rates × "
+          f"{SWEEP_TRIALS} trials × 2 strategies…")
+    sweep = run_sweep()
+    SWEEP_PATH.write_text(json.dumps(sweep, indent=2))
+    print(f"✓ Wrote {SWEEP_PATH.relative_to(ROOT)}")
+    for pt in sweep["points"]:
+        print(f"  {pt['arrival_rate']:.2f} veh/s : "
+              f"tp {pt['adaptive_throughput']:.1f} vs {pt['fixed_throughput']:.1f} "
+              f"({pt['throughput_pct_delta']:+.1f}%) · "
+              f"wait {pt['adaptive_avg_wait']:.0f} vs {pt['fixed_avg_wait']:.0f} "
+              f"({pt['wait_pct_delta']:+.1f}%)")
     return 0
 
 

@@ -34,7 +34,6 @@ class SignalOptimizer:
         self.optimization_task: Optional[asyncio.Task] = None
         self.optimization_history: List[OptimizationResult] = []
         self.traffic_patterns: Dict[str, TrafficPattern] = {}
-        self.ml_model_accuracy = 0.94
         
         # Optimization parameters
         self.optimization_interval = 30  # Optimize every 30 seconds
@@ -70,7 +69,7 @@ class SignalOptimizer:
         # Start optimization loop
         self.optimization_task = asyncio.create_task(self._optimization_loop())
         
-        logger.info("✅ Signal optimizer started - ML accuracy: 94%+")
+        logger.info("✅ Signal optimizer started — rule-based (queue-balancing + pattern-adaptive + efficiency-boost + congestion-relief)")
         
     async def stop(self):
         """Stop signal optimization"""
@@ -306,40 +305,35 @@ class SignalOptimizer:
         
         return base_timing
     
-    def _predict_improvement(self, queue_lengths: Dict, current_efficiency: float, 
+    def _predict_improvement(self, queue_lengths: Dict, current_efficiency: float,
                            new_timing: Dict, pattern: Optional[TrafficPattern]) -> float:
-        """Predict traffic improvement using ML model (simulated)"""
-        # Simulated ML prediction with realistic variability
-        base_improvement = 5.0  # Base 5% improvement
-        
-        # Factor 1: Queue length reduction potential
+        """Heuristic estimate of expected improvement for this optimization.
+
+        This is a per-decision *estimate* (not a measurement). Real
+        microsim-measured Δ vs fixed-time baseline is reported by
+        src/bench/microsim.py and surfaced at /api/v1/bench/results.
+        """
+        base_improvement = 5.0  # baseline % improvement
+
+        # Factor 1: queue length reduction potential (capped 10 %)
         max_queue = max(queue_lengths.values()) if queue_lengths else 0
-        queue_factor = min(10, max_queue / 3)  # Up to 10% improvement for high queues
-        
-        # Factor 2: Current efficiency gap
+        queue_factor = min(10, max_queue / 3)
+
+        # Factor 2: current efficiency gap (capped 15 %)
         efficiency_gap = 1.0 - current_efficiency
-        efficiency_factor = efficiency_gap * 15  # Up to 15% improvement for low efficiency
-        
-        # Factor 3: Pattern matching bonus
+        efficiency_factor = efficiency_gap * 15
+
+        # Factor 3: pattern-match bonus
         pattern_factor = 3.0 if pattern and pattern.intensity > 1.0 else 1.0
-        
-        # Factor 4: Timing optimization quality
+
+        # Factor 4: cycle time within sweet spot bonus
         cycle_time = sum(new_timing.values())
-        timing_factor = 2.0 if 80 <= cycle_time <= 120 else 1.0  # Optimal cycle time bonus
-        
-        # ML model prediction (simulated with noise)
-        predicted_improvement = base_improvement + queue_factor + efficiency_factor + pattern_factor + timing_factor
-        
-        # Add realistic ML model uncertainty
-        noise = random.uniform(-0.5, 0.5)
-        predicted_improvement = max(1.0, min(25.0, predicted_improvement + noise))
-        
-        # Simulate ML accuracy of 94%
-        if random.random() < 0.94:
-            return predicted_improvement
-        else:
-            # 6% of predictions are less accurate
-            return predicted_improvement * random.uniform(0.7, 1.3)
+        timing_factor = 2.0 if 80 <= cycle_time <= 120 else 1.0
+
+        estimate = base_improvement + queue_factor + efficiency_factor + pattern_factor + timing_factor
+        # Small bounded noise — keeps successive estimates from being identical.
+        estimate += random.uniform(-0.5, 0.5)
+        return max(1.0, min(25.0, estimate))
     
     def _calculate_confidence(self, intersection_data: Dict, pattern: Optional[TrafficPattern]) -> float:
         """Calculate confidence in optimization result"""
@@ -410,7 +404,7 @@ class SignalOptimizer:
             "recent_optimizations": len(recent_optimizations),
             "average_improvement": sum(opt.expected_improvement for opt in recent_optimizations) / len(recent_optimizations) if recent_optimizations else 0,
             "average_confidence": sum(opt.confidence for opt in recent_optimizations) / len(recent_optimizations) if recent_optimizations else 0,
-            "ml_model_accuracy": self.ml_model_accuracy,
+            "optimizer_kind": "rule-based",
             "active_patterns": len(self.traffic_patterns),
             "optimization_interval": self.optimization_interval
         }

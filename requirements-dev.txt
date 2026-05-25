@@ -1,0 +1,2 @@
+# Dev/test dependencies (not deployed to Railway — runtime uses requirements.txt).
+pytest>=8.0
