@@ -1,0 +1,51 @@
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+  smoke-bench:
+    # Sanity-check that the microsim still produces a positive
+    # throughput Δ at peak load — protects the committed numbers
+    # from quiet regressions in the optimizer or harness.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run a tiny microsim trial
+        run: |
+          python - <<'PY'
+          from src.bench.microsim import run, DEFAULTS
+          quick = {**DEFAULTS, "trials": 8, "sim_seconds": 600, "warmup_seconds": 60}
+          r = run(quick)
+          tp = r["delta"]["throughput_per_min"]["pct_delta"]
+          print(f"smoke throughput Δ: {tp:+.1f}%")
+          assert tp > 0, f"smoke bench regressed: tp Δ = {tp:.1f}%"
+          PY

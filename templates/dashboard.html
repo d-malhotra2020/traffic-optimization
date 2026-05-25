@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>traffic-flow · operator console</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23111114'/%3E%3Ccircle cx='10' cy='10' r='4' fill='%2322c55e'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%23ef4444'/%3E%3C/svg%3E">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -812,10 +814,12 @@
 
     function renderBench(bench) {
       const meta = document.getElementById('benchMeta');
-      // Update footer trial count from bench
-      const trials = bench?.params?.trials;
-      if (trials) {
-        document.getElementById('footerTrials').textContent = `${trials} × 2`;
+      // Update footer trial count from bench (separate var name — `trials` is
+      // reused for display below, declaring it twice was a silent JS-block
+      // SyntaxError that broke all subsequent fetches).
+      const benchTrials = bench?.params?.trials;
+      if (benchTrials) {
+        document.getElementById('footerTrials').textContent = `${benchTrials} × 2`;
       }
       if (!bench?.delta) {
         meta.textContent = 'bench results not yet generated';
